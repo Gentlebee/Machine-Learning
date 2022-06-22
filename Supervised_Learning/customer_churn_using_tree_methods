@@ -1,0 +1,153 @@
+from google.colab import drive
+drive.mount("/content/drive")
+
+
+Create a model to predict whether or not a customer will churn
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+df = pd.read_csv("/content/drive/MyDrive/DATA/Telco-Customer-Churn.csv")
+
+Exploratory data Analysis
+
+df.isna().sum()
+
+sns.countplot(data=df,x='Churn')
+
+sns.violinplot(data=df,x='Churn',y='TotalCharges')
+
+plt.figure(figsize=(10,4),dpi=200)
+sns.boxplot(data=df,y='TotalCharges',x='Contract',hue='Churn')
+plt.legend(loc=(1.1,0.5))
+
+df.columns
+
+corr_df = pd.get_dummies(data=df[['gender', 'SeniorCitizen', 'Partner', 'Dependents','PhoneService', 'MultipleLines', 'InternetService',
+       'OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 'TechSupport','StreamingTV', 'StreamingMovies', 'Contract', 'PaperlessBilling',
+       'PaymentMethod','Churn']]).corr()
+
+corr_df['Churn_Yes'].sort_values().iloc[1:-1]
+
+plt.figure(figsize=(10,4),dpi=200)
+sns.barplot(x=corr_df['Churn_Yes'].sort_values().iloc[1:-1].index,y=corr_df['Churn_Yes'].sort_values().iloc[1:-1].values)
+plt.title('Feature Correlation to Yes Churn')
+plt.xticks(rotation=90)
+
+Churn Analysis
+
+df['Contract'].unique()
+
+plt.figure(figsize=(10,4),dpi=200)
+sns.histplot(data=df,x='tenure',bins=60)
+
+plt.figure(figsize=(10,4),dpi=200)
+sns.displot(data=df,x='tenure',bins=70,col='Contract',row='Churn')
+
+plt.figure(figsize=(10,4),dpi=200)
+sns.scatterplot(data=df,x='MonthlyCharges',y='TotalCharges',hue='Churn',alpha=0.5,palette='Dark2')
+
+Creating Cohorts based on Tenure
+
+no_churn = df.groupby(['Churn','tenure']).count().transpose()['No']
+yes_churn = df.groupby(['Churn','tenure']).count().transpose()['Yes']
+churn_rate = 100 *yes_churn/(no_churn+yes_churn)
+
+churn_rate.transpose()['customerID']
+
+plt.figure(figsize=(10,4),dpi=200)
+churn_rate.iloc[0].plot()
+plt.ylabel("Churn Percentage")
+
+Broader Cohort Groups
+
+def cohort(tenure):
+    if tenure < 13:
+        return '0-12 Months'
+    elif tenure < 25:
+        return '12-24 Months'
+    elif tenure < 49:
+        return '24-48 Months'
+    else:
+        return "Over 48 Months"
+        
+
+df['Tenure Cohort'] = df['tenure'].apply(cohort)
+
+df.head(10)[['tenure','Tenure Cohort']]
+
+plt.figure(figsize=(10,4),dpi=200)
+sns.scatterplot(data=df,x='MonthlyCharges',y='TotalCharges',hue='Tenure Cohort',palette='Dark2')
+
+plt.figure(figsize=(10,4),dpi=200)
+sns.countplot(data=df,x='Tenure Cohort',hue='Churn')
+
+plt.figure(figsize=(10,4),dpi=200)
+sns.catplot(data=df,x='Tenure Cohort',hue='Churn',col='Contract',kind='count')
+
+Predictive Modeling - Single Decision Tree, Random Forest, AdaBoost,Gradient Boosting
+
+Single Decision Tree
+
+X = df.drop(['Churn','customerID'],axis=1)
+X = pd.get_dummies(X,drop_first=True)
+y = df['Churn']
+
+from sklearn.model_selection import train_test_split
+
+X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.1,random_state=101)
+
+from sklearn.tree import DecisionTreeClassifier
+
+dt = DecisionTreeClassifier(max_depth=6)
+
+dt.fit(X_train,y_train)
+
+preds = dt.predict(X_test)
+
+from sklearn.metrics import accuracy_score,plot_confusion_matrix,classification_report
+
+print(classification_report(y_test,preds))
+
+plot_confusion_matrix(dt,X_test,y_test)
+
+imp_feats=pd.DataFrame(data=dt.feature_importances_,index=X.columns,columns=['Feature Importance']).sort_values("Feature Importance")
+
+plt.figure(figsize=(14,6),dpi=200)
+sns.barplot(data=imp_feats.sort_values('Feature Importance'),x=imp_feats.sort_values('Feature Importance').index,y='Feature Importance')
+plt.xticks(rotation=90)
+plt.title("Feature Importance for Decision Tree");
+
+Random Forest
+
+from sklearn.ensemble import RandomForestClassifier
+
+rf=RandomForestClassifier(n_estimators=100)
+
+rf.fit(X_train,y_train)
+
+preds=rf.predict(X_test)
+
+print(classification_report(y_test,preds))
+
+plot_confusion_matrix(dt,X_test,y_test)
+
+Boosted Trees
+
+from sklearn.ensemble import GradientBoostingClassifier,AdaBoostClassifier
+
+ada_model = AdaBoostClassifier()
+
+ada_model.fit(X_train,y_train)
+
+preds = ada_model.predict(X_test)
+
+print(classification_report(y_test,preds))
+
+plot_confusion_matrix(dt,X_test,y_test)
+
+
+Analysis Results: We got the best performance on AdaBoostClassifier, however it should be noted that others too showed similar results. We have not done grid search.
+
